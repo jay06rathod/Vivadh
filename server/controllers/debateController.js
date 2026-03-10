@@ -11,6 +11,10 @@ const deepseek = new OpenAI({
     baseURL: 'https://api.deepseek.com'
 });
 
+const groq = new OpenAI({
+  apiKey: process.env.GROQ_API_KEY,
+  baseURL: 'https://api.groq.com/openai/v1'
+});
 const buildSystemPrompt = (modelName, role, topic) => {
     const rolePrompts = {
         'Proposition': 'You argue strongly in favor of the statement.',
@@ -32,22 +36,22 @@ Do not repeat what others have said, build on or challenge it.`;
 }
 
 
-const callGPT = async (messages, systemPrompt, res) => {
-    const stream = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'system', content: systemPrompt}, ...messages],
-        stream: true
-    });
+const callGroq = async (messages, systemPrompt, res) => {
+  const stream = await groq.chat.completions.create({
+    model: 'llama-3.3-70b-versatile',
+    messages: [{ role: 'system', content: systemPrompt }, ...messages],
+    stream: true
+  });
 
-    let fullResponse = '';
-    for await (const chunk of stream) {
-        const text = chunk.choices[0]?.delta?.content || '';
-        if (text) {
-            fullResponse += text;
-            res.write(`data: ${JSON.stringify({model: 'gpt', text})}\n\n`);
-        }
+  let fullResponse = '';
+  for await (const chunk of stream) {
+    const text = chunk.choices[0]?.delta?.content || '';
+    if (text) {
+      fullResponse += text;
+      res.write(`data: ${JSON.stringify({ model: 'llama', text })}\n\n`);
     }
-    return fullResponse;
+  }
+  return fullResponse;
 };
 
 const callClaude = async (messages, systemPrompt, res) => {
@@ -138,7 +142,10 @@ const runRound = async (req,res) => {
         const roundPrompt = `This is round ${roundNumber}. Respond to the debate so far.`;
         const messages = [...history, { role: 'user', content: roundPrompt }];
 
-        const models = ['gpt', 'gemini', 'deepseek', 'claude'];
+        // const models = ['gemini', 'deepseek', 'claude', 'llama'];
+        // const models = ['deepseek', 'claude', 'llama'];
+        // const models = ['claude', 'llama'];
+        const models = ['llama'];
 
         for (const modelName of models) {
       const role = debate.roles[modelName];
@@ -148,7 +155,7 @@ const runRound = async (req,res) => {
 
       let response = '';
 
-      if (modelName === 'gpt') response = await callGPT(messages, systemPrompt, res);
+      if (modelName === 'llama') response = await callGroq(messages, systemPrompt, res);
       else if (modelName === 'gemini') response = await callGemini(messages, systemPrompt, res);
       else if (modelName === 'deepseek') response = await callDeepSeek(messages, systemPrompt, res);
       else if (modelName === 'claude') response = await callClaude(messages, systemPrompt, res);

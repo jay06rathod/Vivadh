@@ -19,11 +19,11 @@ const debateSchema = new mongoose.Schema({
   },
   rounds: {
     type: Number,
-    enum: [3, 5],
+    enum: [3],
     required: true
   },
   roles: {
-    gpt: String,
+    llama: String,
     gemini: String,
     deepseek: String,
     claude: String
