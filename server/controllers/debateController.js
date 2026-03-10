@@ -129,7 +129,7 @@ const runRound = async (req,res) => {
         res.setHeader('Connection', 'keep-alive');
 
         //build conversation history for context
-        const history = debate.message.map(m => ({
+        const history = debate.messages.map(m => ({
             role: m.model === 'user' ? 'user' : 'assistant',
             content: `${m.model.toUpperCase()}: ${m.content}`
         }));
@@ -198,7 +198,7 @@ const addModeratorMessage = async (req,res) => {
         res.json({ message: 'Moderator message saved' });
     }
     catch (err) {
-        res.status(500).json({ message: error.message });
+        res.status(500).json({ message: err.message });
     }
 };
 
@@ -215,6 +215,16 @@ const getDebateById = async (req, res) => {
   try {
     const debate = await Debate.findById(req.params.id);
     res.json(debate);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+const getDebateHistory = async (req, res) => {
+  try {
+    const debates = await Debate.find({ user: req.user._id }).select('topic rounds createdAt summary');
+    res.json(debates);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
