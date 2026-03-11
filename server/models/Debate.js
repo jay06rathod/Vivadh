@@ -24,9 +24,9 @@ const debateSchema = new mongoose.Schema({
   },
   roles: {
     llama: String,
-    gemini: String,
-    deepseek: String,
-    claude: String
+    gemma: String,
+    mixtral: String,
+    deepseek: String
   },
   messages: [messageSchema],
   summary: String

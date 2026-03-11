@@ -1,20 +1,18 @@
 const Debate = require('../models/Debate');
 const OpenAI = require('openai')
-const Anthropic = require('@anthropic-ai/sdk')
-const { GoogleGenerativeAI } = require('@google/generative-ai')
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY});
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY});
-const gemini = new GoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY});
-const deepseek = new OpenAI({ 
-    apiKey: process.env.DEEPSEEK_API_KEY,
-    baseURL: 'https://api.deepseek.com'
-});
 
 const groq = new OpenAI({
   apiKey: process.env.GROQ_API_KEY,
   baseURL: 'https://api.groq.com/openai/v1'
 });
+
+// All models run through Groq's free API
+const groqModels = {
+  llama: 'llama-3.3-70b-versatile',
+  gemma: 'gemma2-9b-it',
+  mixtral: 'mixtral-8x7b-32768',
+  deepseek: 'deepseek-r1-distill-llama-70b'
+};
 const buildSystemPrompt = (modelName, role, topic) => {
     const rolePrompts = {
         'Proposition': 'You argue strongly in favor of the statement.',
@@ -36,9 +34,9 @@ Do not repeat what others have said, build on or challenge it.`;
 }
 
 
-const callGroq = async (messages, systemPrompt, res) => {
+const callGroqModel = async (modelName, messages, systemPrompt, res) => {
   const stream = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: groqModels[modelName],
     messages: [{ role: 'system', content: systemPrompt }, ...messages],
     stream: true
   });
@@ -48,72 +46,7 @@ const callGroq = async (messages, systemPrompt, res) => {
     const text = chunk.choices[0]?.delta?.content || '';
     if (text) {
       fullResponse += text;
-      res.write(`data: ${JSON.stringify({ model: 'llama', text })}\n\n`);
-    }
-  }
-  return fullResponse;
-};
-
-const callClaude = async (messages, systemPrompt, res) => {
-  const stream = await anthropic.messages.stream({
-    model: 'claude-3-5-haiku-20241022',
-    max_tokens: 150,
-    system: systemPrompt,
-    messages
-  });
-
-  let fullResponse = '';
-  for await (const chunk of stream) {
-    if (chunk.type === 'content_block_delta') {
-      const text = chunk.delta?.text || '';
-      if (text) {
-        fullResponse += text;
-        res.write(`data: ${JSON.stringify({ model: 'claude', text })}\n\n`);
-      }
-    }
-  }
-  return fullResponse;
-};
-
-const callGemini = async (messages, systemPrompt, res) => {
-  const model = gemini.getGenerativeModel({ 
-    model: 'gemini-1.5-flash',
-    systemInstruction: systemPrompt
-  });
-
-  const history = messages.slice(0, -1).map(m => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }]
-  }));
-
-  const chat = model.startChat({ history });
-  const lastMessage = messages[messages.length - 1].content;
-  const result = await chat.sendMessageStream(lastMessage);
-
-  let fullResponse = '';
-  for await (const chunk of result.stream) {
-    const text = chunk.text();
-    if (text) {
-      fullResponse += text;
-      res.write(`data: ${JSON.stringify({ model: 'gemini', text })}\n\n`);
-    }
-  }
-  return fullResponse;
-};
-
-const callDeepSeek = async (messages, systemPrompt, res) => {
-  const stream = await deepseek.chat.completions.create({
-    model: 'deepseek-chat',
-    messages: [{ role: 'system', content: systemPrompt }, ...messages],
-    stream: true
-  });
-
-  let fullResponse = '';
-  for await (const chunk of stream) {
-    const text = chunk.choices[0]?.delta?.content || '';
-    if (text) {
-      fullResponse += text;
-      res.write(`data: ${JSON.stringify({ model: 'deepseek', text })}\n\n`);
+      res.write(`data: ${JSON.stringify({ model: modelName, text })}\n\n`);
     }
   }
   return fullResponse;
@@ -142,10 +75,7 @@ const runRound = async (req,res) => {
         const roundPrompt = `This is round ${roundNumber}. Respond to the debate so far.`;
         const messages = [...history, { role: 'user', content: roundPrompt }];
 
-        // const models = ['gemini', 'deepseek', 'claude', 'llama'];
-        // const models = ['deepseek', 'claude', 'llama'];
-        // const models = ['claude', 'llama'];
-        const models = ['llama'];
+        const models = ['llama', 'gemma', 'mixtral', 'deepseek'];
 
         for (const modelName of models) {
       const role = debate.roles[modelName];
@@ -153,12 +83,7 @@ const runRound = async (req,res) => {
 
       res.write(`data: ${JSON.stringify({ event: 'model_start', model: modelName })}\n\n`);
 
-      let response = '';
-
-      if (modelName === 'llama') response = await callGroq(messages, systemPrompt, res);
-      else if (modelName === 'gemini') response = await callGemini(messages, systemPrompt, res);
-      else if (modelName === 'deepseek') response = await callDeepSeek(messages, systemPrompt, res);
-      else if (modelName === 'claude') response = await callClaude(messages, systemPrompt, res);
+      const response = await callGroqModel(modelName, messages, systemPrompt, res);
 
       // save message to DB
       debate.messages.push({
@@ -211,8 +136,32 @@ const addModeratorMessage = async (req,res) => {
 
 const endDebate = async (req,res) => {
     try {
-        const debates = await Debate.find({ user: req.user._id}).select('topic rounds createdAt summary');
-        res.json(debates);
+        const { debateId } = req.body;
+        const debate = await Debate.findById(debateId);
+        if (!debate) return res.status(404).json({ message: 'Debate not found' });
+        if (debate.user.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        // Build transcript for summary
+        const transcript = debate.messages.map(m =>
+            `${m.model.toUpperCase()} (${m.role || 'none'}, Round ${m.round}): ${m.content}`
+        ).join('\n\n');
+
+        // Generate summary via Groq/Llama
+        const completion = await groq.chat.completions.create({
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+                { role: 'system', content: 'You are a debate summarizer. Provide a concise summary of the debate: key arguments from each side, points of agreement/disagreement, and which arguments were strongest. Keep it to 3-4 sentences.' },
+                { role: 'user', content: `Debate topic: "${debate.topic}"\n\nTranscript:\n${transcript}` }
+            ]
+        });
+
+        const summary = completion.choices[0]?.message?.content || 'Summary could not be generated.';
+        debate.summary = summary;
+        await debate.save();
+
+        res.json({ message: 'Debate ended', summary });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -221,6 +170,10 @@ const endDebate = async (req,res) => {
 const getDebateById = async (req, res) => {
   try {
     const debate = await Debate.findById(req.params.id);
+    if (!debate) return res.status(404).json({ message: 'Debate not found' });
+    if (debate.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
     res.json(debate);
   } catch (error) {
     res.status(500).json({ message: error.message });
