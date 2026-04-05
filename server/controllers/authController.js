@@ -1,10 +1,33 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-
+const admin = require('../config/firebase');
 
 const generateToken = (id) => {
   return jwt.sign({ id: id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+};
+
+const googleAuth = async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const { email, name, uid } = decoded;
+
+    let user = await User.findOne({ email });
+    if (!user) {
+      user = await User.create({
+        username: name || 'Vivadh User',
+        email,
+        firebaseUid: uid,
+        password: 'google-auth'
+      });
+    }
+
+    res.json({ token: generateToken(user._id) });
+
+  } catch (err) {
+    res.status(401).json({ message: 'Invalid Firebase token' });
+  }
 };
 
 const register = async (req,res) => {
@@ -51,4 +74,4 @@ const login = async (req,res) => {
     }
 };
 
-module.exports = { register, login };
+module.exports = { register, login, googleAuth };
