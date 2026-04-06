@@ -8,10 +8,10 @@ const MODEL_META = {
   mixtral:  { initial: "M", bg: "#1a0f1a", color: "#d946ef" },
 };
 
-function ModelDots({ models = [] }) {
+function ModelDots({ roles = {} }) {
   return (
     <div className="flex items-center gap-1">
-      {models.map((m) => {
+      {Object.keys(roles).map((m) => {
         const meta = MODEL_META[m];
         if (!meta) return null;
         return (
@@ -45,17 +45,12 @@ export default function HistorySidebar({ isOpen, onClose }) {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      setDebates(data.debates || []);
+      setDebates(Array.isArray(data) ? data : []); // ← fix
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleDebateClick = (id) => {
-    onClose();
-    navigate(`/debate/${id}`);
   };
 
   return (
@@ -77,10 +72,8 @@ export default function HistorySidebar({ isOpen, onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a] flex-shrink-0">
           <span className="font-['Syne'] text-sm font-bold text-[#f0ece4]">History</span>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#444] hover:text-[#888] hover:bg-[#1a1a1a] transition-all"
-          >
+          <button onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#444] hover:text-[#888] hover:bg-[#1a1a1a] transition-all">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
@@ -123,14 +116,14 @@ export default function HistorySidebar({ isOpen, onClose }) {
                 return (
                   <button
                     key={debate._id}
-                    onClick={() => handleDebateClick(debate._id)}
+                    onClick={() => { onClose(); navigate("/history"); }}
                     className="w-full text-left px-3 py-3 rounded-xl hover:bg-[#1a1a1a] transition-all group flex flex-col gap-1.5"
                   >
                     <p className="text-xs text-[#bbb] leading-snug line-clamp-2 group-hover:text-[#f0ece4] transition-colors">
                       {debate.topic}
                     </p>
                     <div className="flex items-center gap-2">
-                      <ModelDots models={debate.models || []} />
+                      <ModelDots roles={debate.roles || {}} />
                       <span className="text-[10px] text-[#333] ml-auto">{formatted}</span>
                     </div>
                   </button>
@@ -143,7 +136,7 @@ export default function HistorySidebar({ isOpen, onClose }) {
         {/* Footer */}
         <div className="px-4 py-3 border-t border-[#1a1a1a] flex-shrink-0">
           <button
-            onClick={() => { onClose(); navigate("/history"); }}
+            onClick={() => { onClose(); navigate(`/debate/${debate._id}`); }}
             className="text-[11px] text-[#333] hover:text-[#666] transition-colors"
           >
             View all →

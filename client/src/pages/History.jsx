@@ -9,10 +9,8 @@ const MODEL_META = {
 };
 
 const TONE_LABELS = {
-  formal:     "Formal",
-  aggressive: "Aggressive",
-  socratic:   "Socratic",
-  satirical:  "Satirical",
+  formal: "Formal", aggressive: "Aggressive",
+  socratic: "Socratic", satirical: "Satirical",
 };
 
 function ModelPill({ modelId }) {
@@ -28,33 +26,23 @@ function ModelPill({ modelId }) {
   );
 }
 
-function DebateCard({ debate, onClick }) {
+function DebateCard({ debate }) {
   const date = new Date(debate.createdAt);
   const formatted = date.toLocaleDateString("en-IN", {
     day: "numeric", month: "short", year: "numeric",
   });
 
   return (
-    <button
-      onClick={onClick}
-      className="w-full text-left bg-[#111] border border-[#2a2a2a] rounded-xl px-5 py-4 flex flex-col gap-3 hover:border-[#3a3a3a] hover:bg-[#141414] transition-all active:scale-[0.99] animate-[fadeUp_0.4s_ease_both]"
-    >
+    <div className="w-full text-left bg-[#111] border border-[#2a2a2a] rounded-xl px-5 py-4 flex flex-col gap-3 animate-[fadeUp_0.4s_ease_both]">
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm font-medium text-[#f0ece4] leading-snug line-clamp-2 flex-1">
           {debate.topic}
         </p>
-        <svg
-          width="14" height="14" viewBox="0 0 24 24" fill="none"
-          stroke="#333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          className="flex-shrink-0 mt-0.5"
-        >
-          <path d="M7 17L17 7M17 7H7M17 7v10" />
-        </svg>
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-1">
-          {(debate.models || []).map((m) => (
+          {Object.keys(debate.roles || {}).map((m) => (
             <ModelPill key={m} modelId={m} />
           ))}
         </div>
@@ -68,7 +56,14 @@ function DebateCard({ debate, onClick }) {
         )}
         <span className="text-[11px] text-[#333] ml-auto">{formatted}</span>
       </div>
-    </button>
+
+      {/* Summary if exists */}
+      {debate.summary && (
+        <p className="text-xs text-[#444] leading-relaxed border-t border-[#1a1a1a] pt-3">
+          {debate.summary}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -77,12 +72,9 @@ export default function History() {
   const [debates, setDebates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
   const token = localStorage.getItem("token");
 
-  useEffect(() => {
-    fetchHistory();
-  }, []);
+  useEffect(() => { fetchHistory(); }, []);
 
   const fetchHistory = async () => {
     setLoading(true);
@@ -93,7 +85,7 @@ export default function History() {
       });
       if (!res.ok) throw new Error("Failed to fetch history");
       const data = await res.json();
-      setDebates(data.debates || []);
+      setDebates(Array.isArray(data) ? data : []); // ← fix
     } catch (err) {
       setError("Couldn't load your debates.");
     } finally {
@@ -103,8 +95,6 @@ export default function History() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] font-['DM_Sans']">
-
-      {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-[#1a1a1a]">
         <button
           onClick={() => navigate("/")}
@@ -120,9 +110,7 @@ export default function History() {
         </button>
       </div>
 
-      {/* Content */}
       <div className="max-w-2xl mx-auto px-4 py-10">
-
         <div className="mb-8">
           <h1 className="font-['Syne'] text-2xl font-bold text-[#f0ece4] mb-1">History</h1>
           <p className="text-xs text-[#444]">All your past debates.</p>
@@ -131,10 +119,7 @@ export default function History() {
         {loading && (
           <div className="flex flex-col gap-3">
             {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="w-full h-24 bg-[#111] border border-[#1a1a1a] rounded-xl animate-pulse"
-              />
+              <div key={i} className="w-full h-24 bg-[#111] border border-[#1a1a1a] rounded-xl animate-pulse" />
             ))}
           </div>
         )}
@@ -142,10 +127,8 @@ export default function History() {
         {!loading && error && (
           <div className="text-center py-16">
             <p className="text-sm text-[#444] mb-4">{error}</p>
-            <button
-              onClick={fetchHistory}
-              className="text-xs text-[#555] border border-[#2a2a2a] rounded-xl px-4 py-2 hover:border-[#444] hover:text-[#888] transition-all"
-            >
+            <button onClick={fetchHistory}
+              className="text-xs text-[#555] border border-[#2a2a2a] rounded-xl px-4 py-2 hover:border-[#444] hover:text-[#888] transition-all">
               Try again
             </button>
           </div>
@@ -155,10 +138,8 @@ export default function History() {
           <div className="text-center py-20">
             <p className="text-sm text-[#333] mb-2">No debates yet.</p>
             <p className="text-xs text-[#222] mb-6">Start one.</p>
-            <button
-              onClick={() => navigate("/setup")}
-              className="px-5 py-2.5 bg-[#f0ece4] text-[#0a0a0a] rounded-xl text-xs font-medium hover:bg-white transition-all active:scale-95"
-            >
+            <button onClick={() => navigate("/setup")}
+              className="px-5 py-2.5 bg-[#f0ece4] text-[#0a0a0a] rounded-xl text-xs font-medium hover:bg-white transition-all active:scale-95">
               Start a debate
             </button>
           </div>
@@ -167,15 +148,10 @@ export default function History() {
         {!loading && !error && debates.length > 0 && (
           <div className="flex flex-col gap-3">
             {debates.map((debate) => (
-              <DebateCard
-                key={debate._id}
-                debate={debate}
-                onClick={() => navigate(`/debate/${debate._id}`)}
-              />
+              <DebateCard key={debate._id} debate={debate} />
             ))}
           </div>
         )}
-
       </div>
 
       <style>{`

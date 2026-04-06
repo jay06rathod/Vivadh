@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import HistorySidebar from '../components/ui/HistorySidebar';
 
 const MODEL_META = {
@@ -169,6 +169,7 @@ export default function Debate() {
   const location = useLocation();
   const navigate = useNavigate();
   const { topic, roles = {}, tone, rounds = 5 } = location.state || {};
+  const { id } = useParams();
 
   const [messages, setMessages] = useState([]);
   const [streamingModel, setStreamingModel] = useState(null);
@@ -191,10 +192,16 @@ export default function Debate() {
   const hasStarted = useRef(false);
 
   useEffect(() => {
-    if (!topic) { navigate("/setup"); return; }
     if (hasStarted.current) return;
     hasStarted.current = true;
-    startDebate();
+
+    if (location.state?.topic) {
+      // New debate — has state from Setup
+      startDebate();
+    } else {
+      // History view — load existing debate from DB
+      loadExistingDebate(id);
+    }
   }, []);
 
   useEffect(() => {
@@ -202,6 +209,41 @@ export default function Debate() {
       feedRef.current.scrollTop = feedRef.current.scrollHeight;
     }
   }, [messages, streamingContent]);
+
+
+  const loadExistingDebate = async (debateId) => {
+  setIsLoading(true);
+  try {
+    const res = await fetch(`/api/debate/${debateId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) { navigate("/history"); return; }
+
+    const debate = await res.json();
+
+    // Populate state from the existing debate
+    setDebateId(debate._id);
+    setCurrentRound(debate.rounds);
+    setPhase("ended"); // it's a completed debate, show as ended
+
+    // Map DB messages to frontend format
+    setMessages(
+      debate.messages
+        .filter(m => m.modelId !== 'user') // exclude moderator messages
+        .map(m => ({
+          modelId: m.modelId,
+          role: m.role,
+          round: m.round,
+          content: m.content,
+        }))
+    );
+  } catch (err) {
+    console.error(err);
+    navigate("/history");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const startDebate = async () => {
     setIsLoading(true);
@@ -457,6 +499,8 @@ export default function Debate() {
 
   return (
     <div className="h-screen bg-[#0a0a0a] flex flex-col font-['DM_Sans'] overflow-hidden">
+
+        <HistorySidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-[#1a1a1a] flex-shrink-0">
         <div className="flex items-center gap-4">

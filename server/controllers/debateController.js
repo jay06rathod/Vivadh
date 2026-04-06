@@ -27,11 +27,11 @@ const buildSystemPrompt = (modelName, role, topic) => {
   const roleInstruction = role ? (rolePrompts[role] || '') : '';
 
   return `You are ${modelName} AI participating in a debate about: "${topic}".
-${roleInstruction}
-Keep your responses concise and punchy — 2 to 3 sentences max per bubble.
-Be direct, confident, and stay in character as ${modelName}.
-Do not repeat what others have said, build on or challenge it.
-Write in plain conversational English only — no markdown, no bullet points, no asterisks, no bold, no headers. Just speak naturally like a human in a debate.`;
+  ${roleInstruction}
+  Keep your responses concise and punchy — 2 to 3 sentences max per bubble.
+  Be direct, confident, and stay in character as ${modelName}.
+  Do not repeat what others have said, build on or challenge it.
+  Write in plain conversational English only — no markdown, no bullet points, no asterisks, no bold, no headers. Just speak naturally like a human in a debate.`;
 };
 
 const callGroqModel = async (modelName, messages, systemPrompt, res) => {
