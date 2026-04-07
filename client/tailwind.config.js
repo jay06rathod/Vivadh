@@ -17,6 +17,7 @@ export default {
         oswald: ['Oswald', 'sans-serif'],
         inter: ['Inter', 'sans-serif'],
         caveat: ['Caveat', 'cursive'],
+        vivadh: ['VivadhCustom', 'sans-serif'],
       },
     },
   },

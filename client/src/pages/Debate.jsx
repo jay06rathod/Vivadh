@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import HistorySidebar from '../components/ui/HistorySidebar';
+import HamBurger from '../components/ui/HamBurger';
 
 const MODEL_META = {
   llama:    { name: "Llama 3.3 70B", handle: "@llama",    initial: "L", bg: "#0f2010", color: "#4ade80" },
@@ -174,6 +175,7 @@ export default function Debate() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [displayTopic, setDisplayTopic] = useState(topic || "");
   const [summary, setSummary] = useState("");
+  const [isScrolled, setIsScrolled] = useState(false);
 
   const feedRef = useRef(null);
   const inputRef = useRef(null);
@@ -300,6 +302,13 @@ const startDebate = async () => {
     console.error(err);
   } finally {
     setIsLoading(false);
+  }
+};
+
+const handleFeedScroll = () => {
+  if (feedRef.current) {
+    // If scrolled down more than 50 pixels, set to true. Otherwise, false.
+    setIsScrolled(feedRef.current.scrollTop > 25); 
   }
 };
 
@@ -518,11 +527,13 @@ const handleNextRound = async () => {
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-[#1a1a1a] flex-shrink-0">
         <div className="flex items-center gap-4">
-          <button onClick={() => setSidebarOpen(true)} className="text-[#444] hover:text-[#888] transition-colors">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M3 6h18M3 12h18M3 18h18" />
-            </svg>
-          </button>
+          
+          {/* 2. Drop the reusable component here */}
+          <HamBurger 
+            isOpen={sidebarOpen} 
+            onClick={() => setSidebarOpen(!sidebarOpen)} 
+          />
+
           <span
             onClick={() => navigate(0)}
             className="font-['Syne'] text-base font-bold text-[#f0ece4] cursor-pointer"
@@ -546,10 +557,36 @@ const handleNextRound = async () => {
               Logout
             </button>
         </div>
+      {(phase === "ended" || currentRound === activeRounds) && isScrolled && (
+        <button
+          onClick={() => {
+            if (feedRef.current) {
+              feedRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
+          className="fixed bottom-32 left-1/2 -translate-x-1/2 z-50 group flex items-center justify-center w-[50px] h-[50px] hover:w-[130px] rounded-full bg-[#111] hover:bg-[#f0ece4] border border-[#2a2a2a] hover:border-[#f0ece4] shadow-lg shadow-black/50 transition-all duration-300 overflow-hidden cursor-pointer"
+        >
+          <svg
+            className="w-3 fill-[#888] group-hover:fill-[#0a0a0a] transition-all duration-300 group-hover:-translate-y-[300%]"
+            viewBox="0 0 384 512"
+          >
+            <path d="M214.6 41.4c-12.5-12.5-32.8-12.5-45.3 0l-160 160c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L160 141.2V448c0 17.7 14.3 32 32 32s32-14.3 32-32V141.2L329.4 246.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3l-160-160z" />
+          </svg>
+          
+          <span className="absolute text-[#0a0a0a] font-semibold text-[13px] opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 whitespace-nowrap">
+            Back to Top
+          </span>
+        </button>
+      )}
       </div>
 
+          
       {/* Feed */}
-      <div ref={feedRef} className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-4 pb-36">
+      <div 
+        ref={feedRef} 
+        onScroll={handleFeedScroll} 
+        className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-4 pb-36"
+      >
         {isLoading && messages.length === 0 && (
           <div className="text-center text-xs text-[#333] mt-8">Loading...</div>
         )}
@@ -583,6 +620,7 @@ const handleNextRound = async () => {
             </button>
           </div>
         )}
+        
       </div>
 
       {/* Fixed bottom bar */}

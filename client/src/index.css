@@ -1,3 +1,48 @@
+.preloader {
+  position: relative;
+  /* Change these two values to scale the entire animation up or down */
+  width: 750px; 
+  height: 750px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0 2px #fff);
+}
+
+.crack {
+  position: absolute;
+  width: 10%;
+  aspect-ratio: 1;
+  background-color: #fef3fc;
+  clip-path: polygon(
+    50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 
+    50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%
+  );
+  /* Sped up from 6s to 3s */
+  animation: rotate 3s infinite; 
+}
+
+/* Reduced delays to match the new 3s speed */
+.crack2 { width: 12%; animation-delay: 0.5s; }
+.crack3 { width: 14%; animation-delay: 0.75s; }
+.crack4 { width: 16%; animation-delay: 1s; }
+.crack5 { width: 18%; animation-delay: 1.25s; }
+
+@keyframes rotate {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@font-face {
+  font-family: 'VivadhCustom';
+  src: url('./assets/fonts/VivadhFont.woff2') format('woff2'); /* Update with your exact filename */
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

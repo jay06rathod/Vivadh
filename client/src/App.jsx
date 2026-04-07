@@ -6,10 +6,16 @@ import Debate from './pages/Debate';
 import History from './pages/History';
 import Landing from "./pages/Landing";
 import ProtectedRoute from "./components/ProtectedRoute";
+import GlobalLoader from './components/layout/GlobalLoader';
 
-function App() {
+
+import { useAuth } from './context/AuthContext'; 
+
+function AppContent() {
+  const { loading } = useAuth(); 
+
   return (
-    <BrowserRouter>
+    <GlobalLoader isLoading={loading}>
       <Routes>
         <Route path='/' element={<Landing/>}/>
         <Route path='/login' element={<Login/>}/>
@@ -17,7 +23,7 @@ function App() {
         <Route path='/setup' element={
           <ProtectedRoute><Setup/></ProtectedRoute>
         }/>
-        <Route path='/debate' element={
+        <Route path='/debate/new' element={
           <ProtectedRoute><Debate/></ProtectedRoute>
         }/>
         <Route path='/debate/:id' element={
@@ -27,6 +33,14 @@ function App() {
           <ProtectedRoute><History/></ProtectedRoute>
         }/>
       </Routes>
+    </GlobalLoader>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
     </BrowserRouter>
   );
 }
