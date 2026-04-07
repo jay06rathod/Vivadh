@@ -35,12 +35,13 @@ const buildSystemPrompt = (modelName, role, topic, tone) => {
   const toneInstruction = tone ? (tonePrompts[tone] || '') : '';
 
   return `You are ${modelName} AI participating in a debate about: "${topic}".
-  ${roleInstruction}
-  ${toneInstruction}
-  Keep your responses concise and punchy — 2 to 3 sentences max per bubble.
-  Be direct, confident, and stay in character as ${modelName}.
-  Do not repeat what others have said, build on or challenge it.
-  Write in plain conversational English only — no markdown, no bullet points, no asterisks, no bold, no headers. Just speak naturally like a human in a debate.`;
+    ${roleInstruction}
+    ${toneInstruction}
+    Keep your responses concise and punchy — 2 to 3 sentences max per bubble.
+    Be direct, confident, and stay in character as ${modelName}.
+    Do not repeat what others have said, build on or challenge it.
+    Write in plain conversational English only — no markdown, no bullet points, no asterisks, no bold, no headers. Just speak naturally like a human in a debate.
+    CRITICAL: Never prefix your response with any name, label, bracket, round number, or identifier of any kind. No "[NAME]:", no "NAME:", no "Round X:". Start directly with your argument.`;
   };
 
 
@@ -124,13 +125,16 @@ const runRound = async (req, res) => {
       const allMessages = [
         ...debate.messages.map(m => ({
           role: 'assistant',
-          content: `${(m.modelId || 'user').toUpperCase()} (${m.role || 'none'}, Round ${m.round}): ${m.content}`
+          content: m.modelId === 'user'
+            ? `Moderator said: "${m.content}"`
+            : m.content  // ← just the raw content, no prefix at all
         })),
         ...currentRoundMessages.map(m => ({
           role: 'assistant',
-          content: `${m.modelId.toUpperCase()} (${m.role || 'none'}, Round ${m.round}): ${m.content}`
+          content: m.content  // ← same, no prefix
         }))
       ];
+
       const history = allMessages.slice(-10);
       // Much more explicit prompt so models actually engage with each other
       const roundPrompt = moderatorMessage

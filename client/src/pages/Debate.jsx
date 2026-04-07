@@ -201,61 +201,74 @@ useEffect(() => {
     }
   }, [messages, streamingContent]);
 
-  const loadExistingDebate = async (debateId) => {
-  setIsLoading(true);
-  try {
-    const res = await fetch(`/api/debate/${debateId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) { navigate("/history"); return; }
-
-    const debate = await res.json();
-    setDebateId(debate._id);
-    setDisplayTopic(debate.topic);
-    setTotalRounds(debate.rounds);
-
-    topicRef.current = debate.topic;
-    rolesRef.current = debate.roles || {};
-    roundsRef.current = debate.rounds;
-
-    // Fix 4 — include moderator messages, don't filter them out
-    const mapped = debate.messages.map(m => {
-      if (m.modelId === 'user') {
-        // Moderator message — use type flag so ModeratorCard renders
-        return { type: 'moderator', content: m.content, round: m.round };
-      }
-      return {
-        modelId: m.modelId,
-        role: m.role,
-        round: m.round,
-        content: m.content,
-      };
-    });
-    setMessages(mapped);
-
-    if (debate.status === 'completed') {
-      setCurrentRound(debate.rounds); // Fix 5 — use DB value not location.state
-      setPhase("ended");
-      if (debate.status === 'completed') {
-        setCurrentRound(debate.rounds);
-        setPhase("ended");
-        if (debate.summary) setSummary(debate.summary); // ← restore summary
-      }
-    } else {
-      const nonModeratorMessages = mapped.filter(m => m.type !== 'moderator');
-      const lastRound = nonModeratorMessages.length > 0
-        ? Math.max(...nonModeratorMessages.map(m => m.round))
-        : 0;
-      setCurrentRound(lastRound); // Fix 5 — correct round from DB
-      setPhase("moderating");
+  useEffect(() => {
+    if (!location.state?.topic && id && id !== 'new') {
+      // ID changed — load the new debate
+      setMessages([]);
+      setPhase("running");
+      setCurrentRound(1);
+      setSummary("");
+      loadExistingDebate(id);
     }
+  }, [id]);
 
-  } catch (err) {
-    console.error(err);
-    navigate("/history");
-  } finally {
-    setIsLoading(false);
-  }
+  const loadExistingDebate = async (debateId) => {
+    console.log("Loading debate:", debateId);
+    console.log("Token:", token);
+      setIsLoading(true);
+      try {
+        const res = await fetch(`/api/debate/${debateId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) { navigate("/history"); return; }
+
+        const debate = await res.json();
+        setDebateId(debate._id);
+        setDisplayTopic(debate.topic);
+        setTotalRounds(debate.rounds);
+
+        topicRef.current = debate.topic;
+        rolesRef.current = debate.roles || {};
+        roundsRef.current = debate.rounds;
+
+        // Fix 4 — include moderator messages, don't filter them out
+        const mapped = debate.messages.map(m => {
+          if (m.modelId === 'user') {
+            // Moderator message — use type flag so ModeratorCard renders
+            return { type: 'moderator', content: m.content, round: m.round };
+          }
+          return {
+            modelId: m.modelId,
+            role: m.role,
+            round: m.round,
+            content: m.content,
+          };
+        });
+        setMessages(mapped);
+
+        if (debate.status === 'completed') {
+          setCurrentRound(debate.rounds); // Fix 5 — use DB value not location.state
+          setPhase("ended");
+          if (debate.status === 'completed') {
+            setCurrentRound(debate.rounds);
+            setPhase("ended");
+            if (debate.summary) setSummary(debate.summary); // ← restore summary
+          }
+        } else {
+          const nonModeratorMessages = mapped.filter(m => m.type !== 'moderator');
+          const lastRound = nonModeratorMessages.length > 0
+            ? Math.max(...nonModeratorMessages.map(m => m.round))
+            : 0;
+          setCurrentRound(lastRound); // Fix 5 — correct round from DB
+          setPhase("moderating");
+        }
+
+      } catch (err) {
+        console.error(err);
+        navigate("/history");
+      } finally {
+        setIsLoading(false);
+      }
 };
 
 const startDebate = async () => {
@@ -279,7 +292,7 @@ const startDebate = async () => {
     window.history.replaceState(
       { topic, roles, tone, rounds }, // preserve state
       '',
-      `/debate`
+      `/debate/new`
     );
 
     await runRound(data.debateId, 1);
@@ -510,7 +523,12 @@ const handleNextRound = async () => {
               <path d="M3 6h18M3 12h18M3 18h18" />
             </svg>
           </button>
-          <span className="font-['Syne'] text-base font-bold text-[#f0ece4]">Vivadh</span>
+          <span
+            onClick={() => navigate(0)}
+            className="font-['Syne'] text-base font-bold text-[#f0ece4] cursor-pointer"
+          >
+            Vivadh
+          </span>
           <div className="h-4 w-px bg-[#2a2a2a]" />
           <span className="text-xs text-[#555] max-w-xs truncate">{displayTopic}</span>
         </div>
