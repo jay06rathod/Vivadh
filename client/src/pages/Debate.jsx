@@ -167,7 +167,7 @@ export default function Debate() {
   const [streamingModel, setStreamingModel] = useState(null);
   const [streamingContent, setStreamingContent] = useState("");
   const [currentRound, setCurrentRound] = useState(1);
-  const [totalRounds, setTotalRounds] = useState(rounds);
+  const [_totalRounds, setTotalRounds] = useState(rounds);
   const [phase, setPhase] = useState("running");
   const [moderatorInput, setModeratorInput] = useState("");
   const [debateId, setDebateId] = useState(null);
@@ -195,7 +195,7 @@ useEffect(() => {
   } else {
     navigate("/setup");
   }
-}, []);
+});
 
   useEffect(() => {
     if (feedRef.current) {
@@ -212,7 +212,7 @@ useEffect(() => {
       setSummary("");
       loadExistingDebate(id);
     }
-  }, [id]);
+  }, [id]); 
 
   const loadExistingDebate = async (debateId) => {
     console.log("Loading debate:", debateId);
@@ -382,7 +382,9 @@ const handleFeedScroll = () => {
             console.error("Stream error:", event.message);
             setStreamingModel(null); setStreamingContent("");
           }
-        } catch (e) { /* skip malformed */ }
+        } catch (e) {
+          console.error(e);
+        }
       }
     }
   };
@@ -462,7 +464,7 @@ const handleFeedScroll = () => {
             console.error("Stream error:", event.message);
             setStreamingModel(null); setStreamingContent("");
           }
-        } catch (e) { /* skip malformed */ }
+        } catch (e) {console.error(e)}
       }
     }
   };
