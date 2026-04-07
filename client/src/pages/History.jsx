@@ -26,23 +26,33 @@ function ModelPill({ modelId }) {
   );
 }
 
-function DebateCard({ debate }) {
+function DebateCard({ debate, onClick }) {
   const date = new Date(debate.createdAt);
   const formatted = date.toLocaleDateString("en-IN", {
     day: "numeric", month: "short", year: "numeric",
   });
+  const assignedModels = Object.entries(debate.roles || {})
+    .filter(([, role]) => role && role !== '')
+    .map(([modelId]) => modelId);
 
   return (
-    <div className="w-full text-left bg-[#111] border border-[#2a2a2a] rounded-xl px-5 py-4 flex flex-col gap-3 animate-[fadeUp_0.4s_ease_both]">
+    <button  // ← changed from div to button
+      onClick={onClick}  // ← added onClick
+      className="w-full text-left bg-[#111] border border-[#2a2a2a] rounded-xl px-5 py-4 flex flex-col gap-3 animate-[fadeUp_0.4s_ease_both] hover:border-[#444] transition-all"
+    >
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm font-medium text-[#f0ece4] leading-snug line-clamp-2 flex-1">
           {debate.topic}
         </p>
+        {/* Resume/View badge */}
+        <span className="text-[10px] text-[#444] border border-[#2a2a2a] rounded-lg px-2 py-1 flex-shrink-0">
+          {debate.status === 'completed' ? 'View' : 'Resume →'}
+        </span>
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-1">
-          {Object.keys(debate.roles || {}).map((m) => (
+          {assignedModels.map((m) => (
             <ModelPill key={m} modelId={m} />
           ))}
         </div>
@@ -57,13 +67,12 @@ function DebateCard({ debate }) {
         <span className="text-[11px] text-[#333] ml-auto">{formatted}</span>
       </div>
 
-      {/* Summary if exists */}
       {debate.summary && (
         <p className="text-xs text-[#444] leading-relaxed border-t border-[#1a1a1a] pt-3">
           {debate.summary}
         </p>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -93,6 +102,11 @@ export default function History() {
     }
   };
 
+    const handleLogout = () => {
+      localStorage.removeItem('token');
+      navigate('/login');
+    };
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] font-['DM_Sans']">
       <div className="flex items-center justify-between px-5 py-3 border-b border-[#1a1a1a]">
@@ -102,13 +116,22 @@ export default function History() {
         >
           Vivadh
         </button>
-        <button
-          onClick={() => navigate("/setup")}
-          className="px-4 py-2 bg-[#f0ece4] text-[#0a0a0a] rounded-xl text-xs font-medium hover:bg-white transition-all active:scale-95"
-        >
-          New debate
-        </button>
-      </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleLogout}
+            className="text-[11px] text-[#444] hover:text-[#888] transition-colors"
+          >
+            Logout
+          </button>
+          <button
+            onClick={() => navigate("/setup")}
+            className="px-4 py-2 bg-[#f0ece4] text-[#0a0a0a] rounded-xl text-xs font-medium hover:bg-white transition-all active:scale-95"
+          >
+            New debate
+          </button>
+        </div>
+        </div>
 
       <div className="max-w-2xl mx-auto px-4 py-10">
         <div className="mb-8">
@@ -148,7 +171,11 @@ export default function History() {
         {!loading && !error && debates.length > 0 && (
           <div className="flex flex-col gap-3">
             {debates.map((debate) => (
-              <DebateCard key={debate._id} debate={debate} />
+              <DebateCard
+                key={debate._id}
+                debate={debate}
+                onClick={() => navigate(`/debate/${debate._id}`)}
+              />
             ))}
           </div>
         )}

@@ -10,10 +10,10 @@ const groqModels = {
   llama:    'llama-3.3-70b-versatile',              // ✅ production
   gemma:    'llama-3.1-8b-instant',                 // ✅ production
   mixtral:  'meta-llama/llama-4-scout-17b-16e-instruct', // ✅ preview
-  deepseek: 'qwen/qwen3-32b'                        // ✅ preview
+  deepseek: 'openai/gpt-oss-20b'                        // ✅ preview
 };
 
-const buildSystemPrompt = (modelName, role, topic) => {
+const buildSystemPrompt = (modelName, role, topic, tone) => {
   const rolePrompts = {
     'proposition':      'You argue strongly in favor of the statement.',
     'opposition':       'You argue strongly against the statement.',
@@ -24,14 +24,38 @@ const buildSystemPrompt = (modelName, role, topic) => {
     'contrarian':       'You disagree on principle and challenge assumptions.'
   };
 
+  const tonePrompts = {
+    'formal':     'Speak in a formal, academic, structured tone. Use precise language.',
+    'aggressive': 'Speak aggressively and combatively. Be sharp, blunt, and ruthless in your arguments.',
+    'socratic':   'Speak in a socratic style. Ask probing questions and challenge assumptions methodically.',
+    'satirical':  'Speak with wit, irony, and satire. Be clever and irreverent.'
+  };
+
   const roleInstruction = role ? (rolePrompts[role] || '') : '';
+  const toneInstruction = tone ? (tonePrompts[tone] || '') : '';
 
   return `You are ${modelName} AI participating in a debate about: "${topic}".
   ${roleInstruction}
+  ${toneInstruction}
   Keep your responses concise and punchy — 2 to 3 sentences max per bubble.
   Be direct, confident, and stay in character as ${modelName}.
   Do not repeat what others have said, build on or challenge it.
   Write in plain conversational English only — no markdown, no bullet points, no asterisks, no bold, no headers. Just speak naturally like a human in a debate.`;
+  };
+
+
+const stripMarkdown = (text) => {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '$1')          // **bold** → bold
+    .replace(/\*(.*?)\*/g, '$1')              // *italic* → italic
+    .replace(/^#{1,6}\s+/gm, '')              // ### headings
+    .replace(/^[\-\*]\s+/gm, ' ')            // bullet points → space not empty
+    .replace(/^\d+\.\s+/gm, ' ')             // numbered lists → space not empty
+    .replace(/`{1,3}[^`]*`{1,3}/g, '')       // `code` blocks
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1') // [links](url)
+    .replace(/^>\s+/gm, '')                   // > blockquotes
+    .replace(/---+/g, '')                     // horizontal rules
+    .replace(/\n{3,}/g, '\n\n')              // collapse excessive newlines
 };
 
 const callGroqModel = async (modelName, messages, systemPrompt, res) => {
@@ -52,30 +76,31 @@ const callGroqModel = async (modelName, messages, systemPrompt, res) => {
     fullResponse += text;
     thinkBuffer += text;
 
-    // Check if we're inside a <think> block
     if (thinkBuffer.includes('<think>')) insideThink = true;
     if (thinkBuffer.includes('</think>')) {
       insideThink = false;
-      // Only emit what comes after </think>
       const afterThink = thinkBuffer.split('</think>').pop();
       thinkBuffer = '';
+      // Stream as-is, no stripMarkdown during streaming
       if (afterThink) {
         res.write(`data: ${JSON.stringify({ type: 'token', content: afterThink })}\n\n`);
       }
       continue;
     }
 
-    // Only stream tokens if we're not inside a think block
     if (!insideThink) {
+      // Stream as-is — no processing during streaming
       res.write(`data: ${JSON.stringify({ type: 'token', content: text })}\n\n`);
       thinkBuffer = '';
     }
   }
 
-  // Strip any remaining <think> blocks from saved response
-  const cleaned = fullResponse.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-  return cleaned;
+  // Only strip on the final saved version — not during streaming
+  const withoutThink = fullResponse.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  return stripMarkdown(withoutThink);
 };
+
+
 
 const runRound = async (req, res) => {
   const debateId = req.params.id;
@@ -94,9 +119,9 @@ const runRound = async (req, res) => {
 
     for (const modelName of models) {
       const role = debate.roles[modelName];
-      const systemPrompt = buildSystemPrompt(modelName, role, debate.topic);
+      const systemPrompt = buildSystemPrompt(modelName, role, debate.topic, debate.tone);
 
-      const history = [
+      const allMessages = [
         ...debate.messages.map(m => ({
           role: 'assistant',
           content: `${(m.modelId || 'user').toUpperCase()} (${m.role || 'none'}, Round ${m.round}): ${m.content}`
@@ -106,7 +131,7 @@ const runRound = async (req, res) => {
           content: `${m.modelId.toUpperCase()} (${m.role || 'none'}, Round ${m.round}): ${m.content}`
         }))
       ];
-
+      const history = allMessages.slice(-10);
       // Much more explicit prompt so models actually engage with each other
       const roundPrompt = moderatorMessage
         ? `The moderator just said: "${moderatorMessage}". This is still round ${roundNumber}. Read everything above carefully and respond directly to what others have argued AND address the moderator's point. Be specific — name the argument you're challenging.`
@@ -208,6 +233,7 @@ const endDebate = async (req, res) => {
 
     const summary = completion.choices[0]?.message?.content || 'Summary could not be generated.';
     debate.summary = summary;
+    debate.status = 'completed'; // ← THIS WAS MISSING
     await debate.save();
 
     res.json({ message: 'Debate ended', summary });
@@ -219,6 +245,11 @@ const endDebate = async (req, res) => {
 
 const getDebateById = async (req, res) => {
   try {
+    // Add this line ↓
+    if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(404).json({ message: 'Debate not found' });
+    }
+
     const debate = await Debate.findById(req.params.id);
     if (!debate) return res.status(404).json({ message: 'Debate not found' });
     if (debate.user.toString() !== req.user._id.toString()) {

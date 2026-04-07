@@ -9,14 +9,19 @@ const MODEL_META = {
 };
 
 function ModelDots({ roles = {} }) {
+  // Only show models that have an actual role assigned
+  const assignedModels = Object.entries(roles).filter(([, role]) => role && role !== '');
+  
+  if (assignedModels.length === 0) return null;
+  
   return (
     <div className="flex items-center gap-1">
-      {Object.keys(roles).map((m) => {
-        const meta = MODEL_META[m];
+      {assignedModels.map(([modelId]) => {
+        const meta = MODEL_META[modelId];
         if (!meta) return null;
         return (
           <div
-            key={m}
+            key={modelId}
             className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold"
             style={{ background: meta.bg, color: meta.color }}
           >
@@ -57,7 +62,7 @@ export default function HistorySidebar({ isOpen, onClose }) {
     <>
       {/* Backdrop */}
       <div
-        onClick={onClose}
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
         className={`fixed inset-0 bg-black z-40 transition-opacity duration-300 ${
           isOpen ? "opacity-50 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
@@ -83,7 +88,7 @@ export default function HistorySidebar({ isOpen, onClose }) {
         {/* New debate button */}
         <div className="px-4 py-3 border-b border-[#1a1a1a] flex-shrink-0">
           <button
-            onClick={() => { onClose(); navigate("/setup"); }}
+            onClick={(e) => { e.stopPropagation(); onClose(); navigate("/setup"); }}
             className="w-full py-2 bg-[#f0ece4] text-[#0a0a0a] rounded-xl text-xs font-medium hover:bg-white transition-all active:scale-95"
           >
             + New debate
@@ -109,6 +114,7 @@ export default function HistorySidebar({ isOpen, onClose }) {
           {!loading && debates.length > 0 && (
             <div className="flex flex-col gap-1 px-2">
               {debates.map((debate) => {
+                // console.log("debate._id:", debate._id);
                 const date = new Date(debate.createdAt);
                 const formatted = date.toLocaleDateString("en-IN", {
                   day: "numeric", month: "short",
@@ -116,7 +122,7 @@ export default function HistorySidebar({ isOpen, onClose }) {
                 return (
                   <button
                     key={debate._id}
-                    onClick={() => { onClose(); navigate("/history"); }}
+                    onClick={(e) => {e.stopPropagation(); console.log("clicked debate:", debate._id); onClose(); navigate(`/debate/${debate._id}`); }}
                     className="w-full text-left px-3 py-3 rounded-xl hover:bg-[#1a1a1a] transition-all group flex flex-col gap-1.5"
                   >
                     <p className="text-xs text-[#bbb] leading-snug line-clamp-2 group-hover:text-[#f0ece4] transition-colors">
@@ -136,7 +142,7 @@ export default function HistorySidebar({ isOpen, onClose }) {
         {/* Footer */}
         <div className="px-4 py-3 border-t border-[#1a1a1a] flex-shrink-0">
           <button
-            onClick={() => { onClose(); navigate(`/debate/${debate._id}`); }}
+            onClick={(e) => { e.stopPropagation(); onClose(); navigate("/history"); }}
             className="text-[11px] text-[#333] hover:text-[#666] transition-colors"
           >
             View all →

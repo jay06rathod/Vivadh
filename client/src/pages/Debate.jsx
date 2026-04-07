@@ -43,27 +43,18 @@ function MessageCard({ message }) {
       setIsPlaying(false);
       return;
     }
-
-    // Cancel any currently playing speech
     window.speechSynthesis.cancel();
-
     const utterance = new SpeechSynthesisUtterance(message.content);
     utterance.rate = 1.05;
     utterance.pitch = 1;
     utterance.volume = 1;
-
-    // Give each model a slightly different voice if available
     const voices = window.speechSynthesis.getVoices();
     const englishVoices = voices.filter(v => v.lang.startsWith('en'));
     const voiceIndex = ['llama', 'gemma', 'mixtral', 'deepseek'].indexOf(message.modelId);
-    if (englishVoices[voiceIndex]) {
-      utterance.voice = englishVoices[voiceIndex];
-    }
-
+    if (englishVoices[voiceIndex]) utterance.voice = englishVoices[voiceIndex];
     utterance.onstart = () => setIsPlaying(true);
     utterance.onend = () => setIsPlaying(false);
     utterance.onerror = () => setIsPlaying(false);
-
     window.speechSynthesis.speak(utterance);
   };
 
@@ -80,24 +71,16 @@ function MessageCard({ message }) {
             </span>
           )}
           <span className="text-[10px] text-[#333] ml-auto">Round {message.round}</span>
-
-          {/* Audio button */}
           <button
             onClick={handleSpeak}
-            className={`ml-1 p-1 rounded-md transition-colors ${
-              isPlaying
-                ? "text-[#4ade80]"
-                : "text-[#333] hover:text-[#888]"
-            }`}
+            className={`ml-1 p-1 rounded-md transition-colors ${isPlaying ? "text-[#4ade80]" : "text-[#333] hover:text-[#888]"}`}
             title={isPlaying ? "Stop" : "Listen"}
           >
             {isPlaying ? (
-              // Stop icon
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                 <rect x="6" y="6" width="12" height="12" rx="2"/>
               </svg>
             ) : (
-              // Speaker icon
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
                 <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
@@ -168,48 +151,55 @@ function RoundDivider({ round }) {
 export default function Debate() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { topic, roles = {}, tone, rounds = 5 } = location.state || {};
   const { id } = useParams();
+  const { topic, roles = {}, tone, rounds = 5 } = location.state || {};
+
+  // console.log("useParams id:", id);
+  // console.log("location.state:", location.state);
+
+  // ← Refs at component level — not inside functions
+  const topicRef = useRef(topic);
+  const rolesRef = useRef(roles);
+  const roundsRef = useRef(rounds);
 
   const [messages, setMessages] = useState([]);
   const [streamingModel, setStreamingModel] = useState(null);
   const [streamingContent, setStreamingContent] = useState("");
   const [currentRound, setCurrentRound] = useState(1);
-  // phases: running | moderating | waiting | ended
-  // running   → models are streaming
-  // moderating → round done, user can type and send to models
-  // waiting   → moderator sent, models responded, waiting for "Next Round" click
-  // ended     → all rounds done
+  const [totalRounds, setTotalRounds] = useState(rounds);
   const [phase, setPhase] = useState("running");
   const [moderatorInput, setModeratorInput] = useState("");
   const [debateId, setDebateId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [displayTopic, setDisplayTopic] = useState(topic || "");
+  const [summary, setSummary] = useState("");
 
   const feedRef = useRef(null);
   const inputRef = useRef(null);
   const token = localStorage.getItem("token");
   const hasStarted = useRef(false);
 
-  useEffect(() => {
-    if (hasStarted.current) return;
-    hasStarted.current = true;
+useEffect(() => {
+  if (hasStarted.current) return;
+  hasStarted.current = true;
 
-    if (location.state?.topic) {
-      // New debate — has state from Setup
-      startDebate();
-    } else {
-      // History view — load existing debate from DB
-      loadExistingDebate(id);
-    }
-  }, []);
+  if (location.state?.topic) {
+    // New debate from Setup
+    startDebate();
+  } else if (id && id !== 'new') {
+    // Load existing from history
+    loadExistingDebate(id);
+  } else {
+    navigate("/setup");
+  }
+}, []);
 
   useEffect(() => {
     if (feedRef.current) {
       feedRef.current.scrollTop = feedRef.current.scrollHeight;
     }
   }, [messages, streamingContent]);
-
 
   const loadExistingDebate = async (debateId) => {
   setIsLoading(true);
@@ -220,23 +210,46 @@ export default function Debate() {
     if (!res.ok) { navigate("/history"); return; }
 
     const debate = await res.json();
-
-    // Populate state from the existing debate
     setDebateId(debate._id);
-    setCurrentRound(debate.rounds);
-    setPhase("ended"); // it's a completed debate, show as ended
+    setDisplayTopic(debate.topic);
+    setTotalRounds(debate.rounds);
 
-    // Map DB messages to frontend format
-    setMessages(
-      debate.messages
-        .filter(m => m.modelId !== 'user') // exclude moderator messages
-        .map(m => ({
-          modelId: m.modelId,
-          role: m.role,
-          round: m.round,
-          content: m.content,
-        }))
-    );
+    topicRef.current = debate.topic;
+    rolesRef.current = debate.roles || {};
+    roundsRef.current = debate.rounds;
+
+    // Fix 4 — include moderator messages, don't filter them out
+    const mapped = debate.messages.map(m => {
+      if (m.modelId === 'user') {
+        // Moderator message — use type flag so ModeratorCard renders
+        return { type: 'moderator', content: m.content, round: m.round };
+      }
+      return {
+        modelId: m.modelId,
+        role: m.role,
+        round: m.round,
+        content: m.content,
+      };
+    });
+    setMessages(mapped);
+
+    if (debate.status === 'completed') {
+      setCurrentRound(debate.rounds); // Fix 5 — use DB value not location.state
+      setPhase("ended");
+      if (debate.status === 'completed') {
+        setCurrentRound(debate.rounds);
+        setPhase("ended");
+        if (debate.summary) setSummary(debate.summary); // ← restore summary
+      }
+    } else {
+      const nonModeratorMessages = mapped.filter(m => m.type !== 'moderator');
+      const lastRound = nonModeratorMessages.length > 0
+        ? Math.max(...nonModeratorMessages.map(m => m.round))
+        : 0;
+      setCurrentRound(lastRound); // Fix 5 — correct round from DB
+      setPhase("moderating");
+    }
+
   } catch (err) {
     console.error(err);
     navigate("/history");
@@ -245,31 +258,46 @@ export default function Debate() {
   }
 };
 
-  const startDebate = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch("/api/debate/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ topic, roles, tone, rounds }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        console.error("startDebate failed:", err.message);
-        return;
-      }
-      const data = await res.json();
-      setDebateId(data.debateId);
-      await runRound(data.debateId, 1);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
+const startDebate = async () => {
+  setIsLoading(true);
+  try {
+    const res = await fetch("/api/debate/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ topic, roles, tone, rounds }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      console.error("startDebate failed:", err.message);
+      return;
     }
-  };
+    const data = await res.json();
+    setDebateId(data.debateId);
+    setDisplayTopic(topic);
+
+    // ← Replace URL with real MongoDB ID — no remount, no Date.now()
+    window.history.replaceState(
+      { topic, roles, tone, rounds }, // preserve state
+      '',
+      `/debate`
+    );
+
+    await runRound(data.debateId, 1);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+  // Use refs as fallback so resumed debates work after refresh
+  const getActiveRoles = () => Object.keys(roles).length > 0 ? roles : rolesRef.current;
+  const getActiveRounds = () => rounds > 0 ? rounds : roundsRef.current;
 
   const runRound = async (id, round) => {
     const dId = id || debateId;
+    const activeRoles = getActiveRoles();
+    const activeRounds = getActiveRounds();
     setPhase("running");
 
     const res = await fetch(`/api/debate/${dId}/round`, {
@@ -278,10 +306,7 @@ export default function Debate() {
       body: JSON.stringify({ round }),
     });
 
-    if (!res.ok) {
-      console.error("runRound failed:", res.status);
-      return;
-    }
+    if (!res.ok) { console.error("runRound failed:", res.status); return; }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -299,73 +324,52 @@ export default function Debate() {
         if (!line.startsWith("data: ")) continue;
         const raw = line.slice(6).trim();
         if (!raw || raw === "[DONE]") continue;
-
         try {
           const event = JSON.parse(raw);
 
           if (event.type === "model_start") {
             state.modelId = event.modelId;
-            state.role = roles[event.modelId] || "";
+            state.role = activeRoles[event.modelId] || "";
             state.text = "";
             setStreamingModel(event.modelId);
             setStreamingContent("");
           }
-
           if (event.type === "token") {
             state.text += event.content;
             setStreamingContent(state.text);
           }
-
           if (event.type === "model_end") {
             const savedId = state.modelId;
             const savedRole = state.role;
             const savedText = state.text;
-            state.modelId = null;
-            state.role = "";
-            state.text = "";
-            setStreamingModel(null);
-            setStreamingContent("");
+            state.modelId = null; state.role = ""; state.text = "";
+            setStreamingModel(null); setStreamingContent("");
             if (savedId && savedText) {
-              setMessages((prev) => [...prev, {
-                modelId: savedId,
-                role: savedRole,
-                round,
-                content: savedText,
-              }]);
+              setMessages((prev) => [...prev, { modelId: savedId, role: savedRole, round, content: savedText }]);
             }
           }
-
           if (event.type === "round_end") {
-            setStreamingModel(null);
-            setStreamingContent("");
-            if (round < rounds) {
-              setPhase("moderating"); // user can now type or click Next Round
+            setStreamingModel(null); setStreamingContent("");
+            if (round < activeRounds) {
+              setPhase("moderating");
             } else {
               await endDebate(dId);
             }
           }
-
           if (event.type === "error") {
             console.error("Stream error:", event.message);
-            setStreamingModel(null);
-            setStreamingContent("");
+            setStreamingModel(null); setStreamingContent("");
           }
-
         } catch (e) { /* skip malformed */ }
       }
     }
   };
 
-  // Moderator sends a message — models respond in SAME round, then go to "waiting"
   const handleModeratorSubmit = async () => {
     if (!moderatorInput.trim() || phase !== "moderating") return;
     const msg = moderatorInput.trim();
     setModeratorInput("");
-
-    // Show moderator card
     setMessages((prev) => [...prev, { type: "moderator", content: msg }]);
-
-    // Save to backend
     try {
       await fetch(`/api/debate/${debateId}/moderator`, {
         method: "POST",
@@ -373,14 +377,12 @@ export default function Debate() {
         body: JSON.stringify({ content: msg, roundNumber: currentRound }),
       });
     } catch (e) { console.error(e); }
-
-    // Models respond to moderator in the SAME round — don't increment yet
     await runModeratorRound(debateId, currentRound, msg);
   };
 
-  // Run models responding to moderator — same round, then go to "waiting"
   const runModeratorRound = async (id, round, moderatorMsg) => {
     const dId = id || debateId;
+    const activeRoles = getActiveRoles();
     setPhase("running");
 
     const res = await fetch(`/api/debate/${dId}/round`, {
@@ -389,10 +391,7 @@ export default function Debate() {
       body: JSON.stringify({ round, moderatorMessage: moderatorMsg }),
     });
 
-    if (!res.ok) {
-      console.error("runModeratorRound failed:", res.status);
-      return;
-    }
+    if (!res.ok) { console.error("runModeratorRound failed:", res.status); return; }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -410,81 +409,76 @@ export default function Debate() {
         if (!line.startsWith("data: ")) continue;
         const raw = line.slice(6).trim();
         if (!raw || raw === "[DONE]") continue;
-
         try {
           const event = JSON.parse(raw);
-
           if (event.type === "model_start") {
             state.modelId = event.modelId;
-            state.role = roles[event.modelId] || "";
+            state.role = activeRoles[event.modelId] || "";
             state.text = "";
             setStreamingModel(event.modelId);
             setStreamingContent("");
           }
-
           if (event.type === "token") {
             state.text += event.content;
             setStreamingContent(state.text);
           }
-
           if (event.type === "model_end") {
             const savedId = state.modelId;
             const savedRole = state.role;
             const savedText = state.text;
-            state.modelId = null;
-            state.role = "";
-            state.text = "";
-            setStreamingModel(null);
-            setStreamingContent("");
+            state.modelId = null; state.role = ""; state.text = "";
+            setStreamingModel(null); setStreamingContent("");
             if (savedId && savedText) {
-              setMessages((prev) => [...prev, {
-                modelId: savedId,
-                role: savedRole,
-                round, // same round number
-                content: savedText,
-              }]);
+              setMessages((prev) => [...prev, { modelId: savedId, role: savedRole, round, content: savedText }]);
             }
           }
-
           if (event.type === "round_end") {
-            setStreamingModel(null);
-            setStreamingContent("");
-            setPhase("waiting"); // ← waiting for user to click Next Round
+            setStreamingModel(null); setStreamingContent("");
+            setPhase("waiting");
           }
-
           if (event.type === "error") {
             console.error("Stream error:", event.message);
-            setStreamingModel(null);
-            setStreamingContent("");
+            setStreamingModel(null); setStreamingContent("");
           }
-
         } catch (e) { /* skip malformed */ }
       }
     }
   };
 
-  // User manually clicks Next Round
-  const handleNextRound = async () => {
-    if (phase !== "waiting" && phase !== "moderating") return;
-    const next = currentRound + 1;
-    setCurrentRound(next);
-    await runRound(debateId, next);
-  };
+const handleNextRound = async () => {
+  if (phase !== "waiting" && phase !== "moderating") return;
+  const next = currentRound + 1;
+  const activeRounds = getActiveRounds();
+
+  // Warn before final round
+  if (next > activeRounds) {
+    const confirm = window.confirm("This will end the debate and generate a summary. Continue?");
+    if (!confirm) return;
+    await endDebate(debateId);
+    return;
+  }
+
+  setCurrentRound(next);
+  await runRound(debateId, next);
+};
 
   const endDebate = async (id) => {
     const dId = id || debateId;
     setPhase("ended");
     try {
-      await fetch(`/api/debate/${dId}/end`, {
+      const res = await fetch(`/api/debate/${dId}/end`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.summary) setSummary(data.summary); // ← capture summary
+      }
     } catch (e) { console.error(e); }
   };
 
   const renderedRounds = [];
   let lastRound = 0;
-
   messages.forEach((msg, i) => {
     if (msg.type === "moderator") {
       renderedRounds.push(<ModeratorCard key={`mod-${i}`} message={msg.content} />);
@@ -497,10 +491,17 @@ export default function Debate() {
     renderedRounds.push(<MessageCard key={i} message={msg} />);
   });
 
+  const activeRounds = getActiveRounds();
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    navigate('/login');
+  };
+
   return (
     <div className="h-screen bg-[#0a0a0a] flex flex-col font-['DM_Sans'] overflow-hidden">
+      <HistorySidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        <HistorySidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-[#1a1a1a] flex-shrink-0">
         <div className="flex items-center gap-4">
@@ -511,39 +512,51 @@ export default function Debate() {
           </button>
           <span className="font-['Syne'] text-base font-bold text-[#f0ece4]">Vivadh</span>
           <div className="h-4 w-px bg-[#2a2a2a]" />
-          <span className="text-xs text-[#555] max-w-xs truncate">{topic}</span>
+          <span className="text-xs text-[#555] max-w-xs truncate">{displayTopic}</span>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-[#444]">
-            {phase === "ended" ? "Debate ended" : `Round ${currentRound} / ${rounds}`}
+            {phase === "ended" ? "Debate ended" : `Round ${currentRound} / ${activeRounds}`}
           </span>
           {phase !== "ended" && (
             <div className={`w-1.5 h-1.5 rounded-full ${phase === "running" ? "bg-[#4ade80] animate-pulse" : "bg-[#555]"}`} />
           )}
+            <button
+              onClick={handleLogout}
+              className="text-[11px] text-[#333] hover:text-[#666] transition-colors ml-2"
+            >
+              Logout
+            </button>
         </div>
       </div>
 
       {/* Feed */}
       <div ref={feedRef} className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-4 pb-36">
         {isLoading && messages.length === 0 && (
-          <div className="text-center text-xs text-[#333] mt-8">Starting debate...</div>
+          <div className="text-center text-xs text-[#333] mt-8">Loading...</div>
         )}
-
         {renderedRounds}
-
         {streamingModel && (
           <StreamingCard
             modelId={streamingModel}
-            role={roles[streamingModel] || ""}
+            role={getActiveRoles()[streamingModel] || ""}
             round={currentRound}
             content={streamingContent}
           />
         )}
-
         {phase === "ended" && (
           <div className="flex flex-col items-center gap-4 py-8">
             <div className="h-px w-full bg-[#1a1a1a]" />
             <p className="text-xs text-[#333] tracking-widest uppercase">Debate concluded</p>
+
+            {/* Summary */}
+            {summary && (
+              <div className="w-full max-w-2xl bg-[#111] border border-[#2a2a2a] rounded-xl px-5 py-4">
+                <p className="text-[11px] text-[#444] tracking-widest uppercase mb-2">Summary</p>
+                <p className="text-sm text-[#888] leading-relaxed">{summary}</p>
+              </div>
+            )}
+
             <button
               onClick={() => navigate("/history")}
               className="px-5 py-2.5 bg-transparent border border-[#2a2a2a] text-[#666] rounded-xl text-sm hover:border-[#444] hover:text-[#bbb] transition-all"
@@ -557,8 +570,6 @@ export default function Debate() {
       {/* Fixed bottom bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-[#0a0a0a] border-t border-[#1a1a1a] px-4 py-3">
         <div className="max-w-3xl mx-auto flex flex-col gap-2">
-
-          {/* Moderator input — only shown in moderating phase */}
           {(phase === "moderating" || phase === "waiting") && (
             <div className="flex gap-3 items-end">
               <div className="flex-1 bg-[#111] border border-[#2a2a2a] rounded-xl px-4 py-3 flex items-end gap-2 focus-within:border-[#444] transition-colors">
@@ -584,7 +595,6 @@ export default function Debate() {
                   style={{ maxHeight: "100px", overflow: "hidden" }}
                 />
               </div>
-              {/* Send — only in moderating phase */}
               {phase === "moderating" && (
                 <button
                   onClick={handleModeratorSubmit}
@@ -594,7 +604,6 @@ export default function Debate() {
                   Send
                 </button>
               )}
-              {/* Next Round — shown in both moderating and waiting */}
               <button
                 onClick={handleNextRound}
                 className="px-4 py-3 bg-[#f0ece4] text-[#0a0a0a] rounded-xl text-sm font-medium transition-all hover:bg-white active:scale-95"
@@ -603,18 +612,14 @@ export default function Debate() {
               </button>
             </div>
           )}
-
-          {/* Running state hint */}
           {phase === "running" && (
-            <p className="text-center text-[10px] text-[#333] tracking-wide py-1">
-              Models are debating...
-            </p>
+            <p className="text-center text-[10px] text-[#333] tracking-wide py-1">Models are debating...</p>
           )}
-
-          {/* Status text */}
           {phase === "moderating" && (
             <p className="text-center text-[10px] text-[#333] tracking-wide">
-              Round {currentRound} complete — add your take or go to next round
+              {currentRound === getActiveRounds()
+                ? "Final round complete — next round will end the debate"
+                : `Round ${currentRound} complete — add your take or go to next round`}
             </p>
           )}
           {phase === "waiting" && (
