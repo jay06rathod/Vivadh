@@ -12,7 +12,10 @@ connectDB();
 const app = express();
 
 app.use(cors({
-  origin: 'http://localhost:5173',  // ← explicit origin
+  origin: [
+    'http://localhost:5173',
+    'https://vivadh-sandy.vercel.app/'  // ← add this
+  ],
   credentials: true
 }));
 app.use(express.json());
