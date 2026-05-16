@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import BackButton from "../components/ui/BackButton";
-import { signInWithRedirect, getRedirectResult } from "firebase/auth";
+import { signInWithPopup } from "firebase/auth";
 import { auth, provider } from "../firebase";
 
 const Login = () => {
@@ -14,23 +14,11 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const BASE_URL = import.meta.env.VITE_API_URL || "";
 
-const handleGoogleLogin = async () => {
-  try {
-    await signInWithRedirect(auth, provider);
-    // execution stops here — browser redirects away
-  } catch (error) {
-    console.error(error);
-    setError("Google sign-in failed");
-  }
-};
-
-useEffect(() => {
-  const handleRedirectResult = async () => {
+  const handleGoogleLogin = async () => {
     try {
-      const result = await getRedirectResult(auth);
-      if (!result) return; // no redirect in progress
-
+      const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
+
       const res = await fetch(`${BASE_URL}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -47,14 +35,11 @@ useEffect(() => {
       if (!data.token) { setError("No token received"); return; }
       localStorage.setItem('token', data.token);
       navigate("/setup");
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error(error);
       setError("Google sign-in failed");
     }
   };
-
-  handleRedirectResult();
-}, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

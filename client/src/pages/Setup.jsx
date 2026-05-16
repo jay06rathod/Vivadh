@@ -54,7 +54,7 @@ export default function Setup() {
 
   const handleStart = () => {
     if (!canStart) return;
-    navigate(`/debate/new`, {
+    navigate(`/debate`, {
       state: { topic, roles, tone, rounds }
     });
   };
