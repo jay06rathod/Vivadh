@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import BackButton from "../components/ui/BackButton";
 import { signInWithPopup } from "firebase/auth";
 import { auth, provider } from "../firebase";
+import { useAuth } from "../context/AuthContext";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -15,13 +16,17 @@ const Register = () => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const BASE_URL = import.meta.env.VITE_API_URL || "";
+  const { login } = useAuth();
 
   const handleGoogleRegister = async () => {
+    setError("");
+    setLoading(true);
     try {
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
 
-      const res = await fetch('/api/auth/google', {
+      const res = await fetch(`${BASE_URL}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken }),
@@ -34,12 +39,22 @@ const Register = () => {
       }
 
       const data = await res.json();
-      if (!data.token) { setError("No token received"); return; }
+      if (!data.token) {
+        setError("No token received");
+        return;
+      }
+
+      login(data.user);
       localStorage.setItem('token', data.token);
       navigate("/setup");
-    } catch (error) {
-      console.error(error);
-      setError("Google sign-in failed");
+    } catch (err) {
+      console.error("Google sign-in error:", err);
+      if (err.code === 'auth/popup-closed-by-user') {
+        return;
+      }
+      setError("Google sign-in failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -59,7 +74,7 @@ const Register = () => {
 
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/register', {
+      const res = await fetch(`${BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, email, password }),
@@ -71,8 +86,7 @@ const Register = () => {
       }
 
       const data = await res.json();
-      localStorage.setItem('token', data.token);
-      navigate("/setup");
+      navigate("/verify-email", { state: { email } });
     } catch (err) {
       setError("Registration failed. Check your connection.");
     } finally {
@@ -187,10 +201,6 @@ const Register = () => {
           <Link to="/login" className="text-[#bbb] hover:text-white transition">Sign in</Link>
         </div>
       </div>
-
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap');
-      `}</style>
     </div>
   );
 };

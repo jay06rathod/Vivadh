@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import BackButton from "../components/ui/BackButton";
 import { signInWithPopup } from "firebase/auth";
 import { auth, provider } from "../firebase";
+import { useAuth } from "../context/AuthContext";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -13,8 +14,11 @@ const Login = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const BASE_URL = import.meta.env.VITE_API_URL || "";
+  const { login } = useAuth();
 
   const handleGoogleLogin = async () => {
+    setError("");
+    setLoading(true);
     try {
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
@@ -24,6 +28,7 @@ const Login = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken }),
       });
+      console.log("login status:", res.status);
 
       if (!res.ok) {
         const err = await res.json();
@@ -32,12 +37,24 @@ const Login = () => {
       }
 
       const data = await res.json();
-      if (!data.token) { setError("No token received"); return; }
+      if (!data.token) {
+        setError("No token received");
+        return;
+      }
+
+      login(data.user);
       localStorage.setItem('token', data.token);
       navigate("/setup");
-    } catch (error) {
-      console.error(error);
-      setError("Google sign-in failed");
+    } catch (err) {
+      if (err.code === 'auth/popup-closed-by-user') return;
+      console.error("Google sign-in error:", err);
+      if (err.code === 'auth/popup-closed-by-user') {
+        // User closed the popup — not an error worth showing
+        return;
+      }
+      setError("Google sign-in failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -66,6 +83,7 @@ const Login = () => {
 
       const data = await res.json();
       if (!data.token) { setError("No token received"); return; }
+      login(data.user);
       localStorage.setItem('token', data.token);
       navigate("/setup");
     } catch (err) {
@@ -159,9 +177,6 @@ const Login = () => {
         </div>
       </div>
 
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap');
-      `}</style>
     </div>
   );
 };

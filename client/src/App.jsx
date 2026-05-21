@@ -7,6 +7,8 @@ import History from './pages/History';
 import Landing from "./pages/Landing";
 import ProtectedRoute from "./components/ProtectedRoute";
 import GlobalLoader from './components/layout/GlobalLoader';
+import NotFound from './pages/NotFound';
+import VerifyEmail from './pages/VerifyEmail';
 
 
 import { useAuth } from './context/AuthContext'; 
@@ -20,6 +22,7 @@ function AppContent() {
         <Route path='/' element={<Landing/>}/>
         <Route path='/login' element={<Login/>}/>
         <Route path='/register' element={<Register/>}/>
+        <Route path='/verify-email' element={<VerifyEmail />} />
         <Route path='/setup' element={
           <ProtectedRoute><Setup/></ProtectedRoute>
         }/>
@@ -32,6 +35,7 @@ function AppContent() {
         <Route path='/history' element={
           <ProtectedRoute><History/></ProtectedRoute>
         }/>
+        <Route path='*' element={<NotFound />} />
       </Routes>
     </GlobalLoader>
   );

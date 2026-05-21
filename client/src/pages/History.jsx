@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const MODEL_META = {
   llama:    { name: "Llama 3.3",   initial: "L", bg: "#0f2010", color: "#4ade80" },
@@ -78,10 +79,10 @@ function DebateCard({ debate, onClick }) {
 
 export default function History() {
   const navigate = useNavigate();
+  const { authFetch, logout  } = useAuth();
   const [debates, setDebates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const token = localStorage.getItem("token");
 
   useEffect(() => { fetchHistory(); }, []);
 
@@ -89,13 +90,12 @@ export default function History() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/debate/history", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("Failed to fetch history");
+      const res = await authFetch("/api/debate/history");
+      if (!res) return; 
       const data = await res.json();
       setDebates(Array.isArray(data) ? data : []); // ← fix
     } catch (err) {
+      // console.error("fetchHistory error:", err);
       setError("Couldn't load your debates.");
     } finally {
       setLoading(false);
@@ -103,7 +103,7 @@ export default function History() {
   };
 
     const handleLogout = () => {
-      localStorage.removeItem('token');
+      logout();
       navigate('/login');
     };
 

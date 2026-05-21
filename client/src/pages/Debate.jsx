@@ -1,3 +1,4 @@
+import { useAuth } from '../context/AuthContext';
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import HistorySidebar from '../components/ui/HistorySidebar';
@@ -154,6 +155,7 @@ export default function Debate() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { topic, roles = {}, tone, rounds = 5 } = location.state || {};
+  const { authFetch } = useAuth();
 
   // console.log("useParams id:", id);
   // console.log("location.state:", location.state);
@@ -179,7 +181,6 @@ export default function Debate() {
 
   const feedRef = useRef(null);
   const inputRef = useRef(null);
-  const token = localStorage.getItem("token");
   const hasStarted = useRef(false);
 
 useEffect(() => {
@@ -215,14 +216,11 @@ useEffect(() => {
   }, [id]); 
 
   const loadExistingDebate = async (debateId) => {
-    console.log("Loading debate:", debateId);
-    console.log("Token:", token);
+    
       setIsLoading(true);
       try {
-        const res = await fetch(`/api/debate/${debateId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) { navigate("/history"); return; }
+        const res = await authFetch(`/api/debate/${debateId}`);
+        if (!res) return; // authFetch already handled 401
 
         const debate = await res.json();
         setDebateId(debate._id);
@@ -276,9 +274,9 @@ useEffect(() => {
 const startDebate = async () => {
   setIsLoading(true);
   try {
-    const res = await fetch("/api/debate/start", {
+    const res = await authFetch("/api/debate/start", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json"},
       body: JSON.stringify({ topic, roles, tone, rounds }),
     });
     if (!res.ok) {
@@ -322,9 +320,9 @@ const handleFeedScroll = () => {
     const activeRounds = getActiveRounds();
     setPhase("running");
 
-    const res = await fetch(`/api/debate/${dId}/round`, {
+    const res = await authFetch(`/api/debate/${dId}/round`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json"},
       body: JSON.stringify({ round }),
     });
 
@@ -395,9 +393,9 @@ const handleFeedScroll = () => {
     setModeratorInput("");
     setMessages((prev) => [...prev, { type: "moderator", content: msg }]);
     try {
-      await fetch(`/api/debate/${debateId}/moderator`, {
+      await authFetch(`/api/debate/${debateId}/moderator`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json"},
         body: JSON.stringify({ content: msg, roundNumber: currentRound }),
       });
     } catch (e) { console.error(e); }
@@ -409,9 +407,9 @@ const handleFeedScroll = () => {
     const activeRoles = getActiveRoles();
     setPhase("running");
 
-    const res = await fetch(`/api/debate/${dId}/round`, {
+    const res = await authFetch(`/api/debate/${dId}/round`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json"},
       body: JSON.stringify({ round, moderatorMessage: moderatorMsg }),
     });
 
@@ -490,9 +488,8 @@ const handleNextRound = async () => {
     const dId = id || debateId;
     setPhase("ended");
     try {
-      const res = await fetch(`/api/debate/${dId}/end`, {
+      const res = await authFetch(`/api/debate/${dId}/end`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();

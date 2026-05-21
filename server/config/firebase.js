@@ -1,11 +1,12 @@
 const admin = require('firebase-admin');
+const path = require('path');
+
+// Use the service account JSON file directly — avoids env var parsing issues
+// with the private key (dotenv can mangle \n in PEM keys)
+const serviceAccount = require(path.join(__dirname, '..', '..', 'vivadh-c081d-firebase-adminsdk-fbsvc-2c463ddf19.json'));
 
 admin.initializeApp({
-  credential: admin.credential.cert({
-    projectId: process.env.FIREBASE_PROJECT_ID,
-    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-  }),
+  credential: admin.credential.cert(serviceAccount),
 });
 
 module.exports = admin;
